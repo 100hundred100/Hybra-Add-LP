@@ -75,7 +75,7 @@ jobs:
       - name: Restore bribe state from previous run
         # run-id が空 (初回実行 / API 失敗) の場合はスキップ
         if: steps.find-state-run.outputs.run-id != ''
-        uses: actions/download-artifact@v4.4.0
+        uses: actions/download-artifact@v4
         with:
           name: bribe-state
           path: .
@@ -130,7 +130,7 @@ jobs:
       - name: Save bribe state
         # always() で成功・失敗に関わらず state を保存する
         if: always()
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4
         with:
           name: bribe-state
           path: state.json
