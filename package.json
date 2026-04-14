@@ -1,0 +1,24 @@
+{
+  "name": "hybra-auto-bribe",
+  "version": "1.0.0",
+  "description": "Automated weekly bribe bot for hzUSD-shzUSD pool on Hybra Finance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "explore": "tsx scripts/explore-contracts.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "16.6.1",
+    "viem": "2.47.16"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.39",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

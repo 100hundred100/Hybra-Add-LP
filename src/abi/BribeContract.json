@@ -1,0 +1,53 @@
+[
+  {
+    "type": "function",
+    "name": "notifyRewardAmount",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "token", "type": "address" },
+      { "name": "amount", "type": "uint256" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "rewardsListLength",
+    "stateMutability": "view",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "type": "function",
+    "name": "rewards",
+    "stateMutability": "view",
+    "inputs": [{ "name": "index", "type": "uint256" }],
+    "outputs": [{ "name": "", "type": "address" }]
+  },
+  {
+    "type": "function",
+    "name": "rewardPerToken",
+    "stateMutability": "view",
+    "inputs": [{ "name": "token", "type": "address" }],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "type": "function",
+    "name": "tokenRewardsPerEpoch",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "token", "type": "address" },
+      { "name": "epochStart", "type": "uint256" }
+    ],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "type": "event",
+    "name": "NotifyReward",
+    "inputs": [
+      { "name": "sender", "type": "address", "indexed": true },
+      { "name": "reward", "type": "address", "indexed": true },
+      { "name": "epoch", "type": "uint256", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false }
+    ]
+  }
+]

@@ -1,0 +1,146 @@
+name: Auto Bribe hzUSD-shzUSD
+
+on:
+  schedule:
+    # 毎週木曜 00:00 UTC（Phase 0でepoch開始曜日・時刻を確認後に調整）
+    # Hybraのepoch開始タイミングに合わせて1-3時間後に設定するのが理想
+    - cron: '0 0 * * 4'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'DRY_RUN (true = simulate only, no tx sent)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      bribe_amount:
+        description: 'Bribe amount in hzUSD (default: 5, hard cap: 10)'
+        required: false
+        default: '5'
+        type: string
+
+# 最小権限原則: コード読み取り + アーティファクト API アクセス(state.json の復元に必要)
+permissions:
+  contents: read
+  actions: read
+
+# 同一ワークフローの並列実行を防止
+concurrency:
+  group: auto-bribe
+  cancel-in-progress: false
+
+jobs:
+  bribe:
+    name: Execute Weekly Bribe
+    runs-on: ubuntu-latest
+    # ワーストケース計算: approve 3回(各60s) + notify 3回(各60s) + 指数バックオフ + RPC = ~9分
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4.3.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # download-artifact@v4 のデフォルト run-id は github.run_id (現在 run)。
+      # 前回 run の state.json を復元するには、GitHub API で直近アーティファクトの
+      # run-id を取得して明示的に指定する必要がある。
+      # RUN_ID が空の場合は GITHUB_OUTPUT に書き込まず、次ステップの if: でスキップ。
+      - name: Find run ID containing latest bribe state
+        id: find-state-run
+        continue-on-error: true
+        run: |
+          # per_page=1 だと他ブランチの実行が混入する可能性があるため、
+          # per_page=20 で取得し GITHUB_REF_NAME で同一ブランチに絞り込む。
+          RUN_ID=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bribe-state&per_page=20" \
+            --jq --arg branch "$GITHUB_REF_NAME" \
+            '[.artifacts[] | select(.workflow_run.head_branch == $branch)] | first | .workflow_run.id // empty')
+          if [ -n "$RUN_ID" ]; then
+            echo "run-id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore bribe state from previous run
+        # run-id が空 (初回実行 / API 失敗) の場合はスキップ
+        if: steps.find-state-run.outputs.run-id != ''
+        uses: actions/download-artifact@v4.4.0
+        with:
+          name: bribe-state
+          path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-state-run.outputs.run-id }}
+        continue-on-error: true  # 対象 run にアーティファクトが存在しない場合のフォールバック
+
+      - name: Show restored state (if exists)
+        run: |
+          if [ -f state.json ]; then
+            echo "Restored state.json:"
+            cat state.json
+          else
+            echo "No previous state.json found (first run)"
+          fi
+
+      - name: Execute bribe bot
+        run: npx tsx src/index.ts
+        env:
+          # === RPC ===
+          RPC_URL: ${{ secrets.RPC_URL }}
+
+          # === Wallet ===
+          PRIVATE_KEY: ${{ secrets.BRIBE_WALLET_PRIVATE_KEY }}
+
+          # === Contract Addresses (public, no secrets needed) ===
+          HZUSD_ADDRESS: '0x6E2ade6FFc94d24A81406285c179227dfBFc97CE'
+          POOL_ADDRESS: '0x2084B52E234211399b5f691dEc1edB69ec6Bc721'
+          VOTER_ADDRESS: '0x5623F012d15EB828C12fe32e46d40AdC2A9e4FA3'
+          MINTER_ADDRESS: '0xA8265e40e4Cdf6DB345861F4FCb75F9CC63E149b'
+
+          # === Bribe Contract (set after Phase 0 exploration) ===
+          BRIBE_CONTRACT_ADDRESS: ${{ secrets.BRIBE_CONTRACT_ADDRESS }}
+
+          # === Bribe Config ===
+          BRIBE_AMOUNT: ${{ github.event.inputs.bribe_amount || '5' }}
+
+          # === Notifications ===
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+          # === Mode ===
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+
+      - name: Ensure state.json exists (create empty if missing)
+        if: always()
+        run: |
+          if [ ! -f state.json ]; then
+            echo '{"lastBribedEpoch":0,"history":[]}' > state.json
+            echo "Created empty state.json (bot exited before writing)"
+          fi
+
+      - name: Save bribe state
+        # always() で成功・失敗に関わらず state を保存する
+        if: always()
+        uses: actions/upload-artifact@v4.4.0
+        with:
+          name: bribe-state
+          path: state.json
+          retention-days: 90
+          overwrite: true
+
+      - name: Show final state
+        if: always()
+        run: |
+          if [ -f state.json ]; then
+            echo "Final state.json:"
+            cat state.json
+          fi
